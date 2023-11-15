@@ -49,6 +49,7 @@ class Quantize(nn.Module):
         embed_onehot = F.one_hot(embed_ind, self.n_embed).type(flatten.dtype)
         embed_ind = embed_ind.view(*input.shape[:-1])
         quantize = self.embed_code(embed_ind)
+        # import pdb; pdb.set_trace()
 
         if self.training:
             embed_onehot_sum = embed_onehot.sum(0)
@@ -175,64 +176,82 @@ class VQVAE(nn.Module):
         super().__init__()
 
         self.enc_b = Encoder(in_channel, channel, n_res_block, n_res_channel, stride=4)
-        self.enc_t = Encoder(channel, channel, n_res_block, n_res_channel, stride=2)
-        self.quantize_conv_t = nn.Conv2d(channel, embed_dim, 1)
-        self.quantize_t = Quantize(embed_dim, n_embed)
-        self.dec_t = Decoder(
-            embed_dim, embed_dim, channel, n_res_block, n_res_channel, stride=2
-        )
-        self.quantize_conv_b = nn.Conv2d(embed_dim + channel, embed_dim, 1)
+        # self.enc_t = Encoder(channel, channel, n_res_block, n_res_channel, stride=2)
+        # self.quantize_conv_t = nn.Conv2d(channel, embed_dim, 1)
+        # self.quantize_t = Quantize(embed_dim, n_embed)
+        # self.dec_t = Decoder(
+        #     embed_dim, embed_dim, channel, n_res_block, n_res_channel, stride=2
+        # )
+        self.quantize_conv_b = nn.Conv2d(channel, embed_dim, 1)
         self.quantize_b = Quantize(embed_dim, n_embed)
-        self.upsample_t = nn.ConvTranspose2d(
-            embed_dim, embed_dim, 4, stride=2, padding=1
-        )
+        # self.upsample_t = nn.ConvTranspose2d(
+        #     embed_dim, embed_dim, 4, stride=2, padding=1
+        # )
         self.dec = Decoder(
-            embed_dim + embed_dim,
+            embed_dim,
             in_channel,
             channel,
             n_res_block,
             n_res_channel,
             stride=4,
         )
+        self.info = f"in_channel: {in_channel}, channel: {channel}, n_res_block: {n_res_block}, n_res_channel: {n_res_channel}, embed_dim: {embed_dim}, n_embed: {n_embed}, decay: {decay}"
 
     def forward(self, input):
-        quant_t, quant_b, diff, _, _ = self.encode(input)
-        dec = self.decode(quant_t, quant_b)
+        quant_b, diff, _ = self.encode(input)
+        dec = self.decode(quant_b)
 
         return dec, diff
 
     def encode(self, input):
-        enc_b = self.enc_b(input)
-        enc_t = self.enc_t(enc_b)
+        # import pdb; pdb.set_trace()
+        enc_b = self.enc_b(input) # (3, 256, 256) --> (128, 64, 64)
+        # enc_t = self.enc_t(enc_b)
 
-        quant_t = self.quantize_conv_t(enc_t).permute(0, 2, 3, 1)
-        quant_t, diff_t, id_t = self.quantize_t(quant_t)
-        quant_t = quant_t.permute(0, 3, 1, 2)
-        diff_t = diff_t.unsqueeze(0)
+        # quant_t = self.quantize_conv_t(enc_t).permute(0, 2, 3, 1)
+        # import pdb; pdb.set_trace()
+        # quant_t, diff_t, id_t = self.quantize_t(quant_t) # 32 * 32 vectors of dim 64. codebook contains vectors of dim 64.
+        # quant_t = quant_t.permute(0, 3, 1, 2)
+        # diff_t = diff_t.unsqueeze(0)
 
-        dec_t = self.dec_t(quant_t)
-        enc_b = torch.cat([dec_t, enc_b], 1)
+        # dec_t = self.dec_t(quant_t)
+        # enc_b = torch.cat([dec_t, enc_b], 1)
 
         quant_b = self.quantize_conv_b(enc_b).permute(0, 2, 3, 1)
         quant_b, diff_b, id_b = self.quantize_b(quant_b)
         quant_b = quant_b.permute(0, 3, 1, 2)
         diff_b = diff_b.unsqueeze(0)
 
-        return quant_t, quant_b, diff_t + diff_b, id_t, id_b
+        # import pdb; pdb.set_trace()
 
-    def decode(self, quant_t, quant_b):
-        upsample_t = self.upsample_t(quant_t)
-        quant = torch.cat([upsample_t, quant_b], 1)
-        dec = self.dec(quant)
+        return quant_b, diff_b, id_b
 
+    # def decode(self, quant_t, quant_b):
+    #     upsample_t = self.upsample_t(quant_t) # quant_t: (64, 32, 32) --> (64, 64, 64)
+    #     quant = torch.cat([upsample_t, quant_b], 1)
+    #     dec = self.dec(quant) # quant: (128, 64, 64)
+    #     import pdb; pdb.set_trace()
+
+    #     return dec
+    def decode(self, quant_b):
+        dec = self.dec(quant_b) # quant: (128, 64, 64)
         return dec
 
-    def decode_code(self, code_t, code_b):
-        quant_t = self.quantize_t.embed_code(code_t)
-        quant_t = quant_t.permute(0, 3, 1, 2)
+    # def decode_code(self, code_t, code_b):
+    #     quant_t = self.quantize_t.embed_code(code_t)
+    #     quant_t = quant_t.permute(0, 3, 1, 2)
+    #     quant_b = self.quantize_b.embed_code(code_b)
+    #     quant_b = quant_b.permute(0, 3, 1, 2)
+
+    #     dec = self.decode(quant_t, quant_b)
+
+    #     return dec
+    def decode_code(self, code_b):
+        # quant_t = self.quantize_t.embed_code(code_t)
+        # quant_t = quant_t.permute(0, 3, 1, 2)
         quant_b = self.quantize_b.embed_code(code_b)
         quant_b = quant_b.permute(0, 3, 1, 2)
 
-        dec = self.decode(quant_t, quant_b)
+        dec = self.decode(quant_b)
 
         return dec
