@@ -182,8 +182,9 @@ class VQVAE(nn.Module):
         # self.dec_t = Decoder(
         #     embed_dim, embed_dim, channel, n_res_block, n_res_channel, stride=2
         # )
-        self.quantize_conv_b = nn.Conv2d(channel, embed_dim, 1)
+        self.quantize_conv_b = nn.Conv2d(channel, embed_dim, 4, stride=4, padding=4) # hack, just for dim to match
         self.quantize_b = Quantize(embed_dim, n_embed)
+        self.upsample_b = nn.ConvTranspose2d(embed_dim, embed_dim, 4, stride=4, padding=4) # the dims here are brute forced to match
         # self.upsample_t = nn.ConvTranspose2d(
         #     embed_dim, embed_dim, 4, stride=2, padding=1
         # )
@@ -205,7 +206,7 @@ class VQVAE(nn.Module):
 
     def encode(self, input):
         # import pdb; pdb.set_trace()
-        enc_b = self.enc_b(input) # (3, 256, 256) --> (128, 64, 64)
+        enc_b = self.enc_b(input) # (3, 256, 256) --> (128, 64, 64) desired: (3, 224, 224) --> (384, 16, 16)
         # enc_t = self.enc_t(enc_b)
 
         # quant_t = self.quantize_conv_t(enc_t).permute(0, 2, 3, 1)
@@ -222,8 +223,6 @@ class VQVAE(nn.Module):
         quant_b = quant_b.permute(0, 3, 1, 2)
         diff_b = diff_b.unsqueeze(0)
 
-        # import pdb; pdb.set_trace()
-
         return quant_b, diff_b, id_b
 
     # def decode(self, quant_t, quant_b):
@@ -234,7 +233,9 @@ class VQVAE(nn.Module):
 
     #     return dec
     def decode(self, quant_b):
-        dec = self.dec(quant_b) # quant: (128, 64, 64)
+        upsample_b = self.upsample_b(quant_b) 
+        dec = self.dec(upsample_b) # quant: (128, 64, 64)
+        # import pdb; pdb.set_trace()
         return dec
 
     # def decode_code(self, code_t, code_b):
