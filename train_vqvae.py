@@ -98,10 +98,11 @@ def main(args):
     dataset = datasets.ImageFolder(args.path, transform=transform)
     sampler = dist.data_sampler(dataset, shuffle=True, distributed=args.distributed)
     loader = DataLoader(
-        dataset, batch_size=128 // args.n_gpu, sampler=sampler, num_workers=2
+        dataset, batch_size=args.batch // args.n_gpu, sampler=sampler, num_workers=2
     )
 
     model = VQVAE().to(device)
+    # model = VQVAE(channel=384, embed_dim=384).to(device)
 
     if args.distributed:
         model = nn.parallel.DistributedDataParallel(
@@ -143,7 +144,11 @@ if __name__ == "__main__":
     parser.add_argument("--epoch", type=int, default=560)
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--sched", type=str)
+
+    parser.add_argument("--batch", type=int, default=128)
+
     parser.add_argument("path", type=str)
+    
 
     args = parser.parse_args()
 
