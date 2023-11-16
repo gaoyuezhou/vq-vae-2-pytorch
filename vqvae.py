@@ -182,12 +182,14 @@ class VQVAE(nn.Module):
         # self.dec_t = Decoder(
         #     embed_dim, embed_dim, channel, n_res_block, n_res_channel, stride=2
         # )
-        self.quantize_conv_b = nn.Conv2d(channel, embed_dim, 4, stride=4, padding=4) # hack, just for dim to match
+        # self.quantize_conv_b = nn.Conv2d(channel, embed_dim, 4, stride=4, padding=4) # hack, just for dim to match
+        self.quantize_conv_b = Encoder(channel, channel, n_res_block, n_res_channel, stride=4)
         self.quantize_b = Quantize(embed_dim, n_embed)
-        self.upsample_b = nn.ConvTranspose2d(embed_dim, embed_dim, 4, stride=4, padding=4) # the dims here are brute forced to match
-        # self.upsample_t = nn.ConvTranspose2d(
-        #     embed_dim, embed_dim, 4, stride=2, padding=1
-        # )
+        # self.upsample_b = nn.ConvTranspose2d(embed_dim, embed_dim, 4, stride=4, padding=4) # the dims here are brute forced to match
+        # # self.upsample_t = nn.ConvTranspose2d(
+        # #     embed_dim, embed_dim, 4, stride=2, padding=1
+        # # )
+        self.upsample_b = Decoder(embed_dim, embed_dim, channel, n_res_block, n_res_channel, stride=4)
         self.dec = Decoder(
             embed_dim,
             in_channel,
