@@ -15,7 +15,11 @@ from scheduler import CycleScheduler
 import distributed as dist
 
 
-def train(epoch, loader, model, optimizer, scheduler, device):
+def train(epoch, loader, model, optimizer, scheduler, device, name='tst'):
+    # check if directory exists, if not create it
+    if not os.path.exists(f"sample_{name}"):
+        os.makedirs(f"sample_{name}")
+
     if dist.is_primary():
         loader = tqdm(loader)
 
@@ -72,7 +76,7 @@ def train(epoch, loader, model, optimizer, scheduler, device):
 
                 utils.save_image(
                     torch.cat([sample, out], 0),
-                    f"sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png",
+                    f"sample_{name}/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png",
                     nrow=sample_size,
                     normalize=True,
                     range=(-1, 1),
@@ -96,6 +100,7 @@ def main(args):
     )
 
     dataset = datasets.ImageFolder(args.path, transform=transform)
+    # dataset = datasets.ImageFolder(args.path)
     sampler = dist.data_sampler(dataset, shuffle=True, distributed=args.distributed)
     loader = DataLoader(
         dataset, batch_size=args.batch // args.n_gpu, sampler=sampler, num_workers=2
@@ -123,10 +128,13 @@ def main(args):
         )
 
     for i in range(args.epoch):
-        train(i, loader, model, optimizer, scheduler, device)
+        train(i, loader, model, optimizer, scheduler, device, name=args.name)
+
+        if not os.path.exists(f"checkpoint_{args.name}"):
+            os.makedirs(f"checkpoint_{args.name}")
 
         if dist.is_primary():
-            torch.save(model.state_dict(), f"checkpoint/vqvae_{str(i + 1).zfill(3)}.pt")
+            torch.save(model.state_dict(), f"checkpoint_{args.name}/vqvae_{str(i + 1).zfill(3)}.pt")
 
 
 if __name__ == "__main__":
@@ -146,6 +154,7 @@ if __name__ == "__main__":
     parser.add_argument("--sched", type=str)
 
     parser.add_argument("--batch", type=int, default=128)
+    parser.add_argument("--name", type=str, default='tst')
 
     parser.add_argument("path", type=str)
     

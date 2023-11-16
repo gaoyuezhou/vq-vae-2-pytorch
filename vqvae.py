@@ -175,15 +175,23 @@ class VQVAE(nn.Module):
     ):
         super().__init__()
 
-        self.enc_b = Encoder(in_channel, channel, n_res_block, n_res_channel, stride=4)
-        # self.enc_t = Encoder(channel, channel, n_res_block, n_res_channel, stride=2)
-        # self.quantize_conv_t = nn.Conv2d(channel, embed_dim, 1)
-        # self.quantize_t = Quantize(embed_dim, n_embed)
-        # self.dec_t = Decoder(
-        #     embed_dim, embed_dim, channel, n_res_block, n_res_channel, stride=2
-        # )
-        # self.quantize_conv_b = nn.Conv2d(channel, embed_dim, 4, stride=4, padding=4) # hack, just for dim to match
-        self.quantize_conv_b = Encoder(channel, channel, n_res_block, n_res_channel, stride=4)
+        # self.enc_b = Encoder(in_channel, channel, n_res_block, n_res_channel, stride=4)
+        # # self.enc_t = Encoder(channel, channel, n_res_block, n_res_channel, stride=2)
+        # # self.quantize_conv_t = nn.Conv2d(channel, embed_dim, 1)
+        # # self.quantize_t = Quantize(embed_dim, n_embed)
+        # # self.dec_t = Decoder(
+        # #     embed_dim, embed_dim, channel, n_res_block, n_res_channel, stride=2
+        # # )
+        # # self.quantize_conv_b = nn.Conv2d(channel, embed_dim, 4, stride=4, padding=4) # hack, just for dim to match
+        # self.quantize_conv_b = Encoder(channel, channel, n_res_block, n_res_channel, stride=4)
+        
+        self.dino_enc = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+        # feeze dino encoder
+        for param in self.dino_enc.parameters():
+            param.requires_grad = False
+        import torchvision.transforms as T
+        self.dino_trans =  T.Compose([T.Resize(196)])
+
         self.quantize_b = Quantize(embed_dim, n_embed)
         # self.upsample_b = nn.ConvTranspose2d(embed_dim, embed_dim, 4, stride=4, padding=4) # the dims here are brute forced to match
         # # self.upsample_t = nn.ConvTranspose2d(
@@ -207,21 +215,26 @@ class VQVAE(nn.Module):
         return dec, diff
 
     def encode(self, input):
+        # # import pdb; pdb.set_trace()
+        # enc_b = self.enc_b(input) # (3, 256, 256) --> (128, 64, 64) desired: (3, 224, 224) --> (384, 16, 16)
+        # # enc_t = self.enc_t(enc_b)
+
+        # # quant_t = self.quantize_conv_t(enc_t).permute(0, 2, 3, 1)
+        # # import pdb; pdb.set_trace()
+        # # quant_t, diff_t, id_t = self.quantize_t(quant_t) # 32 * 32 vectors of dim 64. codebook contains vectors of dim 64.
+        # # quant_t = quant_t.permute(0, 3, 1, 2)
+        # # diff_t = diff_t.unsqueeze(0)
+
+        # # dec_t = self.dec_t(quant_t)
+        # # enc_b = torch.cat([dec_t, enc_b], 1)
+
+        # quant_b = self.quantize_conv_b(enc_b).permute(0, 2, 3, 1) # (batch, 14, 14, 384)
         # import pdb; pdb.set_trace()
-        enc_b = self.enc_b(input) # (3, 256, 256) --> (128, 64, 64) desired: (3, 224, 224) --> (384, 16, 16)
-        # enc_t = self.enc_t(enc_b)
-
-        # quant_t = self.quantize_conv_t(enc_t).permute(0, 2, 3, 1)
+        reshaped_input = self.dino_trans(input)
         # import pdb; pdb.set_trace()
-        # quant_t, diff_t, id_t = self.quantize_t(quant_t) # 32 * 32 vectors of dim 64. codebook contains vectors of dim 64.
-        # quant_t = quant_t.permute(0, 3, 1, 2)
-        # diff_t = diff_t.unsqueeze(0)
-
-        # dec_t = self.dec_t(quant_t)
-        # enc_b = torch.cat([dec_t, enc_b], 1)
-
-        quant_b = self.quantize_conv_b(enc_b).permute(0, 2, 3, 1)
-        quant_b, diff_b, id_b = self.quantize_b(quant_b)
+        patch_tokens = self.dino_enc.forward_features(reshaped_input)['x_norm_patchtokens'] # (batch, 256, 384)
+        patch_tokens = patch_tokens.reshape(patch_tokens.shape[0], 196//self.dino_enc.patch_size, 196//self.dino_enc.patch_size, -1) # (batch, 14, 14, 384) # TODO: double check dino patch feature order
+        quant_b, diff_b, id_b = self.quantize_b(patch_tokens)
         quant_b = quant_b.permute(0, 3, 1, 2)
         diff_b = diff_b.unsqueeze(0)
 
