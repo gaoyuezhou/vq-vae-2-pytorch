@@ -14,6 +14,15 @@ from vqvae import VQVAE
 from scheduler import CycleScheduler
 import distributed as dist
 
+transform = transforms.Compose(
+    [   
+        transforms.Resize(224),
+        transforms.CenterCrop(224),
+        # transforms.ToTensor(),
+        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]), # not normalize at dataloader for memory consideration
+    ]
+)
+
 
 def train(epoch, loader, model, optimizer, scheduler, device, name='tst'):
     # check if directory exists, if not create it
@@ -33,8 +42,10 @@ def train(epoch, loader, model, optimizer, scheduler, device, name='tst'):
 
     for i, (img, label) in enumerate(loader):
         model.zero_grad()
+        img = transform(img.float())
 
         img = img.to(device)
+        # import pdb; pdb.set_trace()
 
         out, latent_loss = model(img)
         recon_loss = criterion(out, img)
@@ -90,21 +101,44 @@ def main(args):
 
     args.distributed = dist.get_world_size() > 1
 
-    transform = transforms.Compose(
-        [
-            transforms.Resize(args.size),
-            transforms.CenterCrop(args.size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-        ]
+    ##################
+    # transform = transforms.Compose(
+    #     [
+    #         transforms.Resize(args.size),
+    #         transforms.CenterCrop(args.size),
+    #         transforms.ToTensor(),
+    #         transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+    #     ]
+    # )
+
+    # dataset = datasets.ImageFolder(args.path, transform=transform)
+    # # dataset = datasets.ImageFolder(args.path)
+    # sampler = dist.data_sampler(dataset, shuffle=True, distributed=args.distributed)
+    # loader = DataLoader(
+    #     dataset, batch_size=args.batch // args.n_gpu, sampler=sampler, num_workers=2
+    # )
+    ##################
+
+    from epic_dataset import EpicKitchenVideoDatasetV2
+
+    # transform = transforms.Compose(
+    #     [   
+    #         transforms.Resize(224),
+    #         transforms.CenterCrop(224),
+    #         # transforms.ToTensor(),
+    #         transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]), # not normalize at dataloader for memory consideration
+    #     ]
+    # )
+
+    dataset = EpicKitchenVideoDatasetV2(
+        folder="/home/kathy/Downloads/videos",
+        frameskip=1, 
+        window_size=1, 
+        mode="train",
+        as_image=True
     )
 
-    dataset = datasets.ImageFolder(args.path, transform=transform)
-    # dataset = datasets.ImageFolder(args.path)
-    sampler = dist.data_sampler(dataset, shuffle=True, distributed=args.distributed)
-    loader = DataLoader(
-        dataset, batch_size=args.batch // args.n_gpu, sampler=sampler, num_workers=2
-    )
+    loader = DataLoader(dataset, batch_size=args.batch, shuffle=False, num_workers=0)
 
     # model = VQVAE().to(device)
     model = VQVAE(channel=384, embed_dim=384).to(device)
