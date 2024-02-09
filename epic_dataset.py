@@ -6,6 +6,7 @@ import bisect
 import torch 
 from torch.utils.data import DataLoader, IterableDataset
 import random
+import time
 from tqdm import tqdm
 import einops
 import decord
@@ -36,26 +37,33 @@ class EpicKitchenVideoDatasetV2(Dataset):
         with open(os.path.join(self.folder, "metadata.json")) as json_file:
             metadata = json.load(json_file)
         self.metadata = metadata
- 
+
+        num_frames = 0
         num_videos = 0
         self.video_paths = []
         print("### Reading metadata...")
         for key in sorted(metadata.keys()):
             if mode in key:
                 num_videos += 1
+                num_frames += metadata[key]
                 self.video_paths.append(os.path.join(self.folder, key))
-        
+
+        cur_time = time.time()
+        print("Create loader begin")
+        # import pdb; pdb.set_trace()
         video_loader = VideoLoader(
             self.video_paths,
             ctx=cpu(0),
             shape=[window_size] + img_size + [3],
-            interval=1, skip=frameskip, shuffle=0
+            interval=1, 
+            skip=frameskip, 
+            shuffle=0
         )
 
-        print("### FINISHED reading metadata")
+        print("### FINISHED reading metadata, time used: ", time.time() - cur_time)
         self.size = len(video_loader)
         self.video_loader = video_loader
-        # import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()
     
     def __len__(self):
         return self.size

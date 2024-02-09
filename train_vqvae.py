@@ -95,7 +95,6 @@ def train(epoch, loader, model, optimizer, scheduler, device, name='tst'):
 
                 model.train()
 
-
 def main(args):
     device = "cuda"
 
@@ -131,8 +130,8 @@ def main(args):
     # )
 
     dataset = EpicKitchenVideoDatasetV2(
-        folder="/home/kathy/Downloads/videos",
-        frameskip=1, 
+        folder=args.path,
+        frameskip=0, 
         window_size=1, 
         mode="train",
         as_image=True
