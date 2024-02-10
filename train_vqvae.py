@@ -87,22 +87,30 @@ def train(epoch, loader, model, optimizer, scheduler, device, name='tst'):
 def main(args):
     device = "cuda"
     args.distributed = dist.get_world_size() > 1
-    transform = transforms.Compose(
-        [
-            transforms.Resize(args.size),
-            transforms.CenterCrop(args.size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-        ]
-    )
 
     if args.dset_type == "images":
+        transform = transforms.Compose(
+            [
+                transforms.Resize(args.size),
+                transforms.CenterCrop(args.size),
+                transforms.ToTensor(),
+                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+            ]
+        )
         dataset = datasets.ImageFolder(args.path, transform=transform)
         sampler = dist.data_sampler(dataset, shuffle=True, distributed=args.distributed)
         loader = DataLoader(
             dataset, batch_size=args.batch // args.n_gpu, sampler=sampler, num_workers=2
         )
-    elif args.data == "epic":
+    elif args.dset_type == "epic":
+        transform = transforms.Compose(
+            [
+                transforms.Resize(args.size),
+                transforms.CenterCrop(args.size),
+                # transforms.ToTensor(),
+                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+            ]
+        )
         from epic_dataset import EpicKitchenVideoDataset
         dataset = EpicKitchenVideoDataset(
             folder=args.path,
@@ -113,7 +121,15 @@ def main(args):
             as_image=True
         )
         loader = DataLoader(dataset, batch_size=args.batch, shuffle=False, num_workers=0)
-    elif args.data == "oxe":
+    elif args.dset_type == "oxe":
+        transform = transforms.Compose(
+            [
+                transforms.Resize(args.size),
+                transforms.CenterCrop(args.size),
+                # transforms.ToTensor(),
+                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+            ]
+        )
         sys.path.append('/vast/gz2123/dev/octo/') # only on cluster for now
         from examples.pytorch_oxe_dataloader import make_dset
         dataset = make_dset(transform=transform)
