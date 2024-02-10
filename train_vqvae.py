@@ -141,6 +141,16 @@ def main(args):
 
     model = VQVAE(channel=384, embed_dim=384, n_embed=2048, n_res_block=4, n_res_channel=128).to(device)
 
+    if os.path.exists(f"checkpoint_{args.name}"):
+        # find the latest checkpoint
+        checkpoints = os.listdir(f"checkpoint_{args.name}")
+        checkpoints = [int(x.split('_')[1].split('.')[0]) for x in checkpoints]
+        checkpoints.sort()
+        latest_checkpoint = checkpoints[-1]
+        ckpt_path = f"checkpoint_{args.name}/vqvae_{str(latest_checkpoint).zfill(3)}.pt"
+        model.load_state_dict(torch.load(ckpt_path))
+        print(f"Resume training from checkpoint {ckpt_path}")
+
     if args.distributed:
         model = nn.parallel.DistributedDataParallel(
             model,
