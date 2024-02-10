@@ -14,18 +14,9 @@ from vqvae import VQVAE
 from scheduler import CycleScheduler
 import distributed as dist
 
-transform = transforms.Compose(
-    [   
-        transforms.Resize(224),
-        transforms.CenterCrop(224),
-        # transforms.ToTensor(),
-        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]), # not normalize at dataloader for memory consideration
-    ]
-)
-
-
 def train(epoch, loader, model, optimizer, scheduler, device, name='tst'):
-    loader.dataset.reset_state()
+    if hasattr(loader.dataset, "reset_state"):
+        loader.dataset.reset_state()
     # check if directory exists, if not create it
     if not os.path.exists(f"sample_{name}"):
         os.makedirs(f"sample_{name}")
@@ -43,10 +34,7 @@ def train(epoch, loader, model, optimizer, scheduler, device, name='tst'):
 
     for i, (img, label) in enumerate(loader):
         model.zero_grad()
-        img = transform(img.float())
-
         img = img.to(device)
-        # import pdb; pdb.set_trace()
 
         out, latent_loss = model(img)
         recon_loss = criterion(out, img)
@@ -98,49 +86,43 @@ def train(epoch, loader, model, optimizer, scheduler, device, name='tst'):
 
 def main(args):
     device = "cuda"
-
     args.distributed = dist.get_world_size() > 1
-
-    ##################
-    # transform = transforms.Compose(
-    #     [
-    #         transforms.Resize(args.size),
-    #         transforms.CenterCrop(args.size),
-    #         transforms.ToTensor(),
-    #         transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-    #     ]
-    # )
-
-    # dataset = datasets.ImageFolder(args.path, transform=transform)
-    # # dataset = datasets.ImageFolder(args.path)
-    # sampler = dist.data_sampler(dataset, shuffle=True, distributed=args.distributed)
-    # loader = DataLoader(
-    #     dataset, batch_size=args.batch // args.n_gpu, sampler=sampler, num_workers=2
-    # )
-    ##################
-
-    from epic_dataset import EpicKitchenVideoDatasetV2
-
-    # transform = transforms.Compose(
-    #     [   
-    #         transforms.Resize(224),
-    #         transforms.CenterCrop(224),
-    #         # transforms.ToTensor(),
-    #         transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]), # not normalize at dataloader for memory consideration
-    #     ]
-    # )
-
-    dataset = EpicKitchenVideoDatasetV2(
-        folder=args.path,
-        frameskip=1, 
-        window_size=1, 
-        mode="train",
-        as_image=True
+    transform = transforms.Compose(
+        [
+            transforms.Resize(args.size),
+            transforms.CenterCrop(args.size),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+        ]
     )
 
-    loader = DataLoader(dataset, batch_size=args.batch, shuffle=False, num_workers=0)
-    # import pdb; pdb.set_trace()
-    # model = VQVAE().to(device)
+    if args.dset_type == "images":
+        dataset = datasets.ImageFolder(args.path, transform=transform)
+        sampler = dist.data_sampler(dataset, shuffle=True, distributed=args.distributed)
+        loader = DataLoader(
+            dataset, batch_size=args.batch // args.n_gpu, sampler=sampler, num_workers=2
+        )
+    elif args.data == "epic":
+        from epic_dataset import EpicKitchenVideoDataset
+        dataset = EpicKitchenVideoDataset(
+            folder=args.path,
+            transform=transform,
+            frameskip=1, 
+            window_size=1, 
+            mode="train",
+            as_image=True
+        )
+        loader = DataLoader(dataset, batch_size=args.batch, shuffle=False, num_workers=0)
+    elif args.data == "oxe":
+        sys.path.append('/vast/gz2123/dev/octo/') # only on cluster for now
+        from examples.pytorch_oxe_dataloader import make_dset
+        dataset = make_dset(transform=transform)
+        loader = DataLoader(
+            dataset, batch_size=args.batch // args.n_gpu,  num_workers=0
+        )
+    else:
+        raise ValueError("Unknown dataset")
+
     model = VQVAE(channel=384, embed_dim=384, n_embed=2048, n_res_block=4, n_res_channel=128).to(device)
 
     if args.distributed:
@@ -182,6 +164,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--dist_url", default=f"tcp://127.0.0.1:{port}")
 
+    parser.add_argument("--dset_type", type=str, default="epic")
     parser.add_argument("--size", type=int, default=256)
     parser.add_argument("--epoch", type=int, default=560)
     parser.add_argument("--lr", type=float, default=3e-4)
