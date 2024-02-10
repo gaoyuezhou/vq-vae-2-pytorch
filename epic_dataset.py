@@ -41,13 +41,16 @@ class EpicKitchenVideoDatasetV2(Dataset):
         num_frames = 0
         num_videos = 0
         self.video_paths = []
+        cumulative_sizes = []
         print("### Reading metadata...")
         for key in sorted(metadata.keys()):
             if mode in key:
                 num_videos += 1
                 num_frames += metadata[key]
+                cumulative_sizes.append(num_frames)
                 self.video_paths.append(os.path.join(self.folder, key))
 
+        # self.video_paths = [self.video_paths[1]]
         cur_time = time.time()
         print("Create loader begin")
         # import pdb; pdb.set_trace()
@@ -59,11 +62,15 @@ class EpicKitchenVideoDatasetV2(Dataset):
             skip=frameskip, 
             shuffle=0
         )
+        # import pdb; pdb.set_trace()
 
         print("### FINISHED reading metadata, time used: ", time.time() - cur_time)
         self.size = len(video_loader)
         self.video_loader = video_loader
-        import pdb; pdb.set_trace()
+        print("### Dataset size: ", self.size)
+        # import pdb; pdb.set_trace()
+        self.dummy = None
+        self.error_count = 0
     
     def __len__(self):
         return self.size
@@ -89,16 +96,35 @@ class EpicKitchenVideoDatasetV2(Dataset):
         with open(os.path.join(self.folder, "metadata.json"), 'w') as json_file:
             json.dump(video_metadata, json_file, indent=4)
 
+    def reset_state(self):
+        print("###### Prev error count: ", self.error_count)
+        self.error_count = 0
+        self.video_loader.reset()
         
     def __getitem__(self, idx): 
         # print(f"### get item {idx}")
-        frames = self.video_loader.next()[0]
-        frames = einops.rearrange(frames, "T H W C -> T C H W")
-        # if self.transform:
-        #     frames = self.transform(frames.float())
-        if self.as_image:
-            frames = frames[0]
-        return frames, torch.tensor(0)
+        while True:
+            try: 
+                frames = self.video_loader.next()[0]
+                # if idx % 2 == 1:
+                #     print(1/0)
+                frames = einops.rearrange(frames, "T H W C -> T C H W")
+                # if self.transform:
+                #     frames = self.transform(frames.float())
+                if self.as_image:
+                    frames = frames[0]
+                if self.dummy is None: # record a dummy item
+                    self.dummy = frames
+                return frames, torch.tensor(0)
+            except StopIteration:
+                print("############ reload!!! ") # This should not be called with this hack
+                self.reset_state() # hack
+            except Exception as e:
+                self.error_count += 1
+                return self.dummy, torch.tensor(0) # return dummy element if there is an error, assume dummy is not None
+                # # print(idx, " continued")
+                # idx = 1
+                # continue
     
     def __len__(self):
         return self.size

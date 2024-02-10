@@ -25,6 +25,7 @@ transform = transforms.Compose(
 
 
 def train(epoch, loader, model, optimizer, scheduler, device, name='tst'):
+    loader.dataset.reset_state()
     # check if directory exists, if not create it
     if not os.path.exists(f"sample_{name}"):
         os.makedirs(f"sample_{name}")
@@ -131,16 +132,16 @@ def main(args):
 
     dataset = EpicKitchenVideoDatasetV2(
         folder=args.path,
-        frameskip=0, 
+        frameskip=1, 
         window_size=1, 
         mode="train",
         as_image=True
     )
 
     loader = DataLoader(dataset, batch_size=args.batch, shuffle=False, num_workers=0)
-
+    # import pdb; pdb.set_trace()
     # model = VQVAE().to(device)
-    model = VQVAE(channel=384, embed_dim=384).to(device)
+    model = VQVAE(channel=384, embed_dim=384, n_embed=2048, n_res_block=4, n_res_channel=128).to(device)
 
     if args.distributed:
         model = nn.parallel.DistributedDataParallel(
