@@ -14,6 +14,18 @@ from vqvae import VQVAE
 from scheduler import CycleScheduler
 import distributed as dist
 
+import psutil
+
+def get_ram_usage():
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / (1024 * 1024 * 1024)  # Memory usage in MB
+
+# Function to get available RAM
+def get_available_ram():
+    mem = psutil.virtual_memory()
+    return mem.available / (1024 * 1024 * 1024)  # Available memory in MB
+
+
 def train(epoch, loader, model, optimizer, scheduler, device, name='tst'):
     if hasattr(loader.dataset, "reset_state"):
         loader.dataset.reset_state()
@@ -33,6 +45,7 @@ def train(epoch, loader, model, optimizer, scheduler, device, name='tst'):
     mse_n = 0
 
     for i, (img, label) in enumerate(loader):
+        print(f"batch {i} RAM usage:", get_ram_usage(), "GB", "      Available RAM:", get_available_ram(), "GB")
         model.zero_grad()
         img = img.to(device)
 
@@ -123,16 +136,18 @@ def main(args):
         loader = DataLoader(dataset, batch_size=args.batch, shuffle=False, num_workers=0)
     elif args.dset_type == "oxe":
         transform = transforms.Compose(
-            [
+            [   
+                transforms.ToTensor(),
                 transforms.Resize(args.size),
                 transforms.CenterCrop(args.size),
                 # transforms.ToTensor(),
                 transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
             ]
         )
-        sys.path.append('/vast/gz2123/dev/octo/') # only on cluster for now
+        sys.path.append('/vast/gz2123/dev/octo/')
+        # sys.path.append('/home/kathy/dev/octo/') # only on cluster for now
         from examples.pytorch_oxe_dataloader import make_dset
-        dataset = make_dset(transform=transform)
+        dataset = make_dset(transform=transform, name='tst', window_size=1)
         loader = DataLoader(
             dataset, batch_size=args.batch // args.n_gpu,  num_workers=0
         )
